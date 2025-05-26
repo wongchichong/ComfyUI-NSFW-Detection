@@ -3,9 +3,7 @@ from PIL import Image
 from transformers import pipeline
 import torchvision.transforms as T
 import torch
-import numpy
-import os
-from datetime import datetime
+import numpy # Kept for tensor2pil/pil2tensor
 
 
 def tensor2pil(image):
@@ -33,64 +31,63 @@ class NSFWDetection:
                     "round": 0.001,
                     # The value represeting the precision to round to, will be set to the step value by default. Can be set to False to disable rounding.
                     "display": "nsfw_threshold"}),
-                "alternative_image": ("IMAGE",),
-                "sfw_output_dir": ("STRING", {
-                    "default": "output/sfw",
-                    "display": "SFW Output Directory"
-                }),
-                "nsfw_output_dir": ("STRING", {
-                    "default": "output/nsfw",
-                    "display": "NSFW Output Directory"
-                }),
             },
         }
 
-    RETURN_TYPES = ("IMAGE",)
+    RETURN_TYPES = ("IMAGE", "IMAGE")
+    RETURN_NAMES = ("SFW_IMAGES", "NSFW_IMAGES")
 
     FUNCTION = "run"
 
     CATEGORY = "NSFWDetection"
 
-    def run(self, image, score, alternative_image, sfw_output_dir, nsfw_output_dir):
+    def run(self, image, score):
         transform = T.ToPILImage()
         classifier = pipeline("image-classification", model="Falconsai/nsfw_image_detection")
 
-        os.makedirs(sfw_output_dir, exist_ok=True)
-        os.makedirs(nsfw_output_dir, exist_ok=True)
+        sfw_image_list = []
+        nsfw_image_list = []
 
         for i in range(len(image)):
-            original_image_pil = transform(image[i].permute(2, 0, 1))
-            result = classifier(original_image_pil)
-            image_size = image[i].size()
-            width, height = image_size[1], image_size[0]
-
-            unique_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S%f')}.png"
-
-            is_nsfw = False
-            if result: # Ensure result is not empty
-                for r in result:
-                    if r["label"] == "nsfw" and r["score"] > score:
-                        is_nsfw = True
-                        # Save original NSFW image
-                        nsfw_image_path = os.path.join(nsfw_output_dir, unique_filename)
-                        original_image_pil.save(nsfw_image_path)
-
-                        # Save alternative SFW image
-                        alternative_image_pil = transform(alternative_image[0].permute(2, 0, 1))
-                        sfw_alternative_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S%f')}_alt.png"
-                        sfw_alternative_image_path = os.path.join(sfw_output_dir, sfw_alternative_filename)
-                        alternative_image_pil.resize((width, height), resample=Image.Resampling(2)).save(sfw_alternative_image_path)
-                        
-                        # Replace original image with alternative
-                        image[i] = pil2tensor(alternative_image_pil.resize((width, height), resample=Image.Resampling(2)))
-                        break # Found NSFW label, no need to check other results for this image
+            img_tensor = image[i] # This is a single image tensor from the batch
+            pil_img = transform(img_tensor.permute(2, 0, 1))
             
-            if not is_nsfw:
-                # Save original SFW image
-                sfw_image_path = os.path.join(sfw_output_dir, unique_filename)
-                original_image_pil.save(sfw_image_path)
+            result = classifier(pil_img)
+            
+            is_classified_nsfw = False
+            if result: # Ensure result is not empty
+                for r_item in result: # Iterate over potentially multiple classifications
+                    if r_item["label"] == "nsfw" and r_item["score"] >= score:
+                        is_classified_nsfw = True
+                        break # Found NSFW label that meets threshold
+            
+            if is_classified_nsfw:
+                nsfw_image_list.append(img_tensor)
+            else:
+                sfw_image_list.append(img_tensor)
 
-        return (image,)
+        # Prepare output tensors
+        if sfw_image_list:
+            sfw_images_tensor = torch.stack(sfw_image_list)
+        else:
+            # Return an empty tensor with shape (0, H, W, C) if dimensions of original batch are known
+            # For now, using a simple empty tensor. This might need adjustment for ComfyUI.
+            # Let's try to make it (0,H,W,C) if image is not empty, otherwise (0)
+            if image.nelement() == 0 : # Check if input image batch itself is empty
+                 sfw_images_tensor = torch.empty(0)
+            else:
+                 sfw_images_tensor = torch.empty((0, image.shape[1], image.shape[2], image.shape[3]), dtype=image.dtype, device=image.device)
+
+
+        if nsfw_image_list:
+            nsfw_images_tensor = torch.stack(nsfw_image_list)
+        else:
+            if image.nelement() == 0 :
+                 nsfw_images_tensor = torch.empty(0)
+            else:
+                 nsfw_images_tensor = torch.empty((0, image.shape[1], image.shape[2], image.shape[3]), dtype=image.dtype, device=image.device)
+                 
+        return (sfw_images_tensor, nsfw_images_tensor)
 
 
 # A dictionary that contains all nodes you want to export with their names
