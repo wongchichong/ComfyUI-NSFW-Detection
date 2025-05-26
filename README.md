@@ -29,6 +29,21 @@ This node now automatically saves processed images to specific directories:
 
 All images are saved with unique filenames generated using timestamps (e.g., `YYYYMMDD_HHMMSSFFFFFF.png`) to prevent any accidental overwrites. These directories will be created automatically if they don't already exist.
 
+### Configurable Output Directories
+
+You can customize the save locations using the following input fields on the node:
+
+*   **`sfw_output_dir`**:
+    *   **Type**: `STRING`
+    *   **Default**: `"output/sfw"`
+    *   **Description**: Specifies the directory where SFW images (originals or alternatives) will be saved.
+*   **`nsfw_output_dir`**:
+    *   **Type**: `STRING`
+    *   **Default**: `"output/nsfw"`
+    *   **Description**: Specifies the directory where original NSFW images will be saved.
+
+You can provide any valid path for these inputs. If the specified directories (including any parent directories in the path) do not exist, they will be created automatically by the node.
+
 ## Example
 
 <img src="images/example.png" raw=true>

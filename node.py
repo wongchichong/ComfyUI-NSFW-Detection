@@ -34,6 +34,14 @@ class NSFWDetection:
                     # The value represeting the precision to round to, will be set to the step value by default. Can be set to False to disable rounding.
                     "display": "nsfw_threshold"}),
                 "alternative_image": ("IMAGE",),
+                "sfw_output_dir": ("STRING", {
+                    "default": "output/sfw",
+                    "display": "SFW Output Directory"
+                }),
+                "nsfw_output_dir": ("STRING", {
+                    "default": "output/nsfw",
+                    "display": "NSFW Output Directory"
+                }),
             },
         }
 
@@ -43,14 +51,12 @@ class NSFWDetection:
 
     CATEGORY = "NSFWDetection"
 
-    def run(self, image, score, alternative_image):
+    def run(self, image, score, alternative_image, sfw_output_dir, nsfw_output_dir):
         transform = T.ToPILImage()
         classifier = pipeline("image-classification", model="Falconsai/nsfw_image_detection")
 
-        sfw_dir = "output/sfw"
-        nsfw_dir = "output/nsfw"
-        os.makedirs(sfw_dir, exist_ok=True)
-        os.makedirs(nsfw_dir, exist_ok=True)
+        os.makedirs(sfw_output_dir, exist_ok=True)
+        os.makedirs(nsfw_output_dir, exist_ok=True)
 
         for i in range(len(image)):
             original_image_pil = transform(image[i].permute(2, 0, 1))
@@ -66,13 +72,13 @@ class NSFWDetection:
                     if r["label"] == "nsfw" and r["score"] > score:
                         is_nsfw = True
                         # Save original NSFW image
-                        nsfw_image_path = os.path.join(nsfw_dir, unique_filename)
+                        nsfw_image_path = os.path.join(nsfw_output_dir, unique_filename)
                         original_image_pil.save(nsfw_image_path)
 
                         # Save alternative SFW image
                         alternative_image_pil = transform(alternative_image[0].permute(2, 0, 1))
                         sfw_alternative_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S%f')}_alt.png"
-                        sfw_alternative_image_path = os.path.join(sfw_dir, sfw_alternative_filename)
+                        sfw_alternative_image_path = os.path.join(sfw_output_dir, sfw_alternative_filename)
                         alternative_image_pil.resize((width, height), resample=Image.Resampling(2)).save(sfw_alternative_image_path)
                         
                         # Replace original image with alternative
@@ -81,7 +87,7 @@ class NSFWDetection:
             
             if not is_nsfw:
                 # Save original SFW image
-                sfw_image_path = os.path.join(sfw_dir, unique_filename)
+                sfw_image_path = os.path.join(sfw_output_dir, unique_filename)
                 original_image_pil.save(sfw_image_path)
 
         return (image,)
