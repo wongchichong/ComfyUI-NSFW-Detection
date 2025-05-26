@@ -18,6 +18,17 @@ The main functionality of the project is encapsulated in the `NSFWDetection` cla
 - `score`: The threshold score for classifying an image as NSFW.
 - `alternative_image`: The image to be returned if the input image is classified as NSFW.
 
+## Image Output
+
+This node now automatically saves processed images to specific directories:
+
+*   **`output/nsfw/`**: Original images classified as NSFW (above the set threshold) are saved here.
+*   **`output/sfw/`**:
+    *   Original images classified as SFW are saved here.
+    *   If an image is classified as NSFW, the provided *alternative SFW image* is saved here (after being resized to match the original's dimensions).
+
+All images are saved with unique filenames generated using timestamps (e.g., `YYYYMMDD_HHMMSSFFFFFF.png`) to prevent any accidental overwrites. These directories will be created automatically if they don't already exist.
+
 ## Example
 
 <img src="images/example.png" raw=true>

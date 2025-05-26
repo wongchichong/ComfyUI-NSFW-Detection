@@ -4,6 +4,8 @@ from transformers import pipeline
 import torchvision.transforms as T
 import torch
 import numpy
+import os
+from datetime import datetime
 
 
 def tensor2pil(image):
@@ -44,15 +46,43 @@ class NSFWDetection:
     def run(self, image, score, alternative_image):
         transform = T.ToPILImage()
         classifier = pipeline("image-classification", model="Falconsai/nsfw_image_detection")
+
+        sfw_dir = "output/sfw"
+        nsfw_dir = "output/nsfw"
+        os.makedirs(sfw_dir, exist_ok=True)
+        os.makedirs(nsfw_dir, exist_ok=True)
+
         for i in range(len(image)):
-            result = classifier(transform(image[i].permute(2, 0, 1)))
+            original_image_pil = transform(image[i].permute(2, 0, 1))
+            result = classifier(original_image_pil)
             image_size = image[i].size()
             width, height = image_size[1], image_size[0]
-            for r in result:
-                if r["label"] == "nsfw":
-                    if r["score"] > score:
-                        image[i] = pil2tensor(transform(alternative_image[0].permute(2, 0, 1)).resize((width, height),
-                                                                               resample=Image.Resampling(2)))
+
+            unique_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S%f')}.png"
+
+            is_nsfw = False
+            if result: # Ensure result is not empty
+                for r in result:
+                    if r["label"] == "nsfw" and r["score"] > score:
+                        is_nsfw = True
+                        # Save original NSFW image
+                        nsfw_image_path = os.path.join(nsfw_dir, unique_filename)
+                        original_image_pil.save(nsfw_image_path)
+
+                        # Save alternative SFW image
+                        alternative_image_pil = transform(alternative_image[0].permute(2, 0, 1))
+                        sfw_alternative_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S%f')}_alt.png"
+                        sfw_alternative_image_path = os.path.join(sfw_dir, sfw_alternative_filename)
+                        alternative_image_pil.resize((width, height), resample=Image.Resampling(2)).save(sfw_alternative_image_path)
+                        
+                        # Replace original image with alternative
+                        image[i] = pil2tensor(alternative_image_pil.resize((width, height), resample=Image.Resampling(2)))
+                        break # Found NSFW label, no need to check other results for this image
+            
+            if not is_nsfw:
+                # Save original SFW image
+                sfw_image_path = os.path.join(sfw_dir, unique_filename)
+                original_image_pil.save(sfw_image_path)
 
         return (image,)
 
